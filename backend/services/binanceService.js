@@ -77,10 +77,14 @@ export async function getTicker24h(symbol = 'BTCUSDT') {
     return null;
 
   } catch (e) {
-
-    console.error("Binance ticker error:", e);
-    return null;
-
+    console.error("Ticker fetch failed:", e);
+  
+    return {
+      symbol,
+      lastPrice: 0,
+      priceChangePercent: 0,
+      quoteVolume: 0
+    };
   }
 }
 
