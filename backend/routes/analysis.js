@@ -37,44 +37,29 @@ router.get('/:symbol', async (req, res) => {
 
     let symbol = req.params.symbol.toUpperCase().trim();
 
-    // Accept BTC or BTCUSDT
     if (!symbol.endsWith("USDT")) {
       symbol = symbol + "USDT";
     }
 
-    const data = await runAnalysis(symbol);
+    const pair = symbol;
 
-    res.json(data);
-
-  } catch (err) {
-
-    res.status(500).json({
-      error: err.message
-    });
-
-  }
-
-});
+    const ticker = await getTicker24h(pair);
+    const oi = await getOpenInterest(pair);
+    const klines = await getKlines(pair, "15m", 120);
+    const depth = await getOrderBookDepth(pair);
+    const liqOrders = await getLiquidationOrders(pair);
 
     recordOpenInterest(pair, oi?.openInterest);
+
     const indicators = getIndicatorSummary(klines);
     const regime = getRegimeFromKlines(klines);
     const strategy = getRegimeStrategy(regime);
+
     const oiChangePct = getOIPercentChange(pair, oi?.openInterest);
     const oiInterpretation = interpretOIAndPrice(ticker.priceChangePercent || 0, oiChangePct);
 
     const clusters = clusterLiquidations(liqOrders, ticker.lastPrice);
     const liquidityZones = detectLiquidityZones(klines, depth);
-    const zonesWithScore = [
-      ...liquidityZones.resistance.map((z) => ({
-        ...z,
-        stopHuntProbability: scoreStopHuntProbability(z, clusters),
-      })),
-      ...liquidityZones.support.map((z) => ({
-        ...z,
-        stopHuntProbability: scoreStopHuntProbability(z, clusters),
-      })),
-    ];
 
     const orderBook = analyzeOrderBook(depth.bids, depth.asks);
 
@@ -85,37 +70,19 @@ router.get('/:symbol', async (req, res) => {
       volume: ticker.quoteVolume,
       fundingRate: funding?.fundingRate,
       openInterest: oi?.openInterest,
-      openInterestChangePct: oiChangePct,
-      oiInterpretation,
+      indicators,
       regime,
       strategy,
-      indicators: indicators
-        ? {
-            rsi: indicators.rsi,
-            ema20: indicators.ema20,
-            ema50: indicators.ema50,
-            emaAlignment: indicators.emaAlignment,
-            atr: indicators.atr,
-            adx: indicators.adx,
-            vwap: indicators.vwap,
-          }
-        : null,
-      liquidationClusters: clusters,
-      liquidityZones: zonesWithScore,
-      orderBook,
-      klines: klines?.map((k) => ({
-        time: k[0],
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5]),
-      })),
+      orderBook
     });
+
   } catch (e) {
+
     console.error(e);
     res.status(500).json({ error: e.message });
+
   }
+
 });
 
 export default router;
