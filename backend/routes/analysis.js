@@ -1,5 +1,8 @@
 import { Router } from "express";
-import {
+
+const router = Router();
+
+router.get("/:symbol", async (req, res) => {
 getPremiumIndex,
 getOpenInterest,
 getTicker24h,
