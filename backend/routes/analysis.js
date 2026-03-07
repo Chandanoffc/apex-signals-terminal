@@ -1,38 +1,24 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getPremiumIndex,
   getOpenInterest,
   getTicker24h,
   getLiquidationOrders,
   getOrderBookDepth,
-  getKlines,
-} from '../services/binanceService.js';
-import { getIndicatorSummary } from '../analytics/indicatorsService.js';
-import { getRegimeFromKlines, getRegimeStrategy } from '../analytics/marketRegimeService.js';
-import { getOIPercentChange, interpretOIAndPrice } from '../analytics/openInterestService.js';
-import { recordOpenInterest } from '../analytics/openInterestService.js';
-import { clusterLiquidations } from '../analytics/liquidationClusterService.js';
-import { detectLiquidityZones, scoreStopHuntProbability } from '../analytics/liquidityMapService.js';
-import { analyzeOrderBook } from '../analytics/orderBookService.js';
+  getKlines
+} from "../services/binanceService.js";
+
+import { getIndicatorSummary } from "../analytics/indicatorsService.js";
+import { getRegimeFromKlines, getRegimeStrategy } from "../analytics/marketRegimeService.js";
+import { getOIPercentChange, interpretOIAndPrice } from "../analytics/openInterestService.js";
+import { recordOpenInterest } from "../analytics/openInterestService.js";
+import { clusterLiquidations } from "../analytics/liquidationClusterService.js";
+import { detectLiquidityZones, scoreStopHuntProbability } from "../analytics/liquidityMapService.js";
+import { analyzeOrderBook } from "../analytics/orderBookService.js";
 
 const router = Router();
 
-function binanceSymbol(symbol) {
-
-  symbol = symbol.toUpperCase().trim();
-
-  // If already Binance format
-  if (symbol.endsWith("USDT")) {
-    return symbol;
-  }
-
-  // Convert coin → pair
-  return `${symbol}USDT`;
-
-}
-
-router.get('/:symbol', async (req, res) => {
-
+router.get("/:symbol", async (req, res) => {
   try {
 
     let symbol = req.params.symbol.toUpperCase().trim();
@@ -45,35 +31,102 @@ router.get('/:symbol', async (req, res) => {
 
     console.log("Running analysis for:", pair);
 
-    cconst ticker = await getTicker24h(pair);
+    // -------- PRICE DATA --------
+
+    const ticker = await getTicker24h(pair);
 
     const lastPrice = ticker?.lastPrice || 0;
     const priceChangePercent = ticker?.priceChangePercent || 0;
     const volume = ticker?.quoteVolume || 0;
-    
+
+    // -------- MARKET DATA --------
+
     const oi = await getOpenInterest(pair);
     const klines = await getKlines(pair, "15m", 120);
-    
     const depth = await getOrderBookDepth(pair);
     const liqOrders = await getLiquidationOrders(pair);
-    
+
+    // -------- SAFE ANALYTICS --------
+
+    let indicators = null;
+    let regime = null;
+    let strategy = null;
+
+    if (klines && klines.length) {
+      indicators = getIndicatorSummary(klines);
+      regime = getRegimeFromKlines(klines);
+      strategy = getRegimeStrategy(regime);
+    }
+
+    // -------- OI ANALYSIS --------
+
+    let oiChangePct = null;
+    let oiInterpretation = null;
+
+    if (oi && oi.openInterest) {
+      recordOpenInterest(pair, oi.openInterest);
+      oiChangePct = getOIPercentChange(pair, oi.openInterest);
+      oiInterpretation = interpretOIAndPrice(priceChangePercent || 0, oiChangePct);
+    }
+
+    // -------- LIQUIDATION ANALYSIS --------
+
+    const clusters = liqOrders
+      ? clusterLiquidations(liqOrders, lastPrice)
+      : [];
+
+    // -------- LIQUIDITY ZONES --------
+
+    const liquidityZones = klines?.length
+      ? detectLiquidityZones(klines, depth)
+      : { resistance: [], support: [] };
+
+    const zonesWithScore = [
+      ...liquidityZones.resistance.map(z => ({
+        ...z,
+        stopHuntProbability: scoreStopHuntProbability(z, clusters)
+      })),
+      ...liquidityZones.support.map(z => ({
+        ...z,
+        stopHuntProbability: scoreStopHuntProbability(z, clusters)
+      }))
+    ];
+
+    // -------- ORDERBOOK --------
+
+    const orderBook = depth
+      ? analyzeOrderBook(depth.bids, depth.asks)
+      : null;
+
+    // -------- RESPONSE --------
+
     res.json({
       symbol: pair,
       price: lastPrice,
       change24h: priceChangePercent,
-      volume: volume
+      volume: volume,
+
+      fundingRate: null,
+      openInterest: oi?.openInterest || 0,
+      openInterestChangePct: oiChangePct,
+      oiInterpretation,
+
+      regime,
+      strategy,
+      indicators,
+
+      liquidationClusters: clusters,
+      liquidityZones: zonesWithScore,
+      orderBook
     });
 
   } catch (e) {
-
     console.error(e);
 
     res.status(500).json({
       error: e.message
     });
-
   }
-
 });
 
 export default router;
