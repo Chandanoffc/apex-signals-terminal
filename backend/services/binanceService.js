@@ -56,8 +56,7 @@ export async function getTicker24h(symbol = 'BTCUSDT') {
 
     const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/ticker/24hr?symbol=${symbol}`);
     const data = await res.json();
-
-    console.log("Ticker response:", data);
+    console.log("BINANCE TICKER:", data);
 
     if (data && data.lastPrice) {
 
