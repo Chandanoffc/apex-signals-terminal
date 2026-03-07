@@ -63,7 +63,9 @@ router.get('/:symbol', async (req, res) => {
 
     res.json({
       symbol: pair,
-      price: lastPrice
+      price: lastPrice,
+      change24h: priceChangePercent,
+      volume: volume
     });
 
   } catch (e) {
