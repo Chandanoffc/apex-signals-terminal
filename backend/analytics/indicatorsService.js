@@ -70,7 +70,9 @@ export function computeVWAP(highs, lows, closes, volumes) {
 }
 
 export function getIndicatorSummary(klines) {
-  if (!klines || klines.length < 50) return null;
+  if (!klines || klines.length === 0) {
+    return null;
+  }
   const closes = klines.map((k) => parseFloat(k[4]));
   const highs = klines.map((k) => parseFloat(k[2]));
   const lows = klines.map((k) => parseFloat(k[3]));
