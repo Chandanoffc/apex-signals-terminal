@@ -45,22 +45,18 @@ router.get('/:symbol', async (req, res) => {
 
     console.log("Running analysis for:", pair);
 
-    const ticker = await getTicker24h(pair);
+    cconst ticker = await getTicker24h(pair);
 
     const lastPrice = ticker?.lastPrice || 0;
     const priceChangePercent = ticker?.priceChangePercent || 0;
     const volume = ticker?.quoteVolume || 0;
-
+    
     const oi = await getOpenInterest(pair);
     const klines = await getKlines(pair, "15m", 120);
-
-    if (!klines.length) {
-      throw new Error("No kline data");
-    }
-
+    
     const depth = await getOrderBookDepth(pair);
     const liqOrders = await getLiquidationOrders(pair);
-
+    
     res.json({
       symbol: pair,
       price: lastPrice,
