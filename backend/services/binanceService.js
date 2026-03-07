@@ -45,46 +45,36 @@ export async function getOpenInterest(symbol = 'BTCUSDT') {
   }
 }
 
-export async function getTicker24h(symbol = 'BTCUSDT') {
-
-  const key = cacheKey('ticker24', symbol);
-  const cached = get(key);
-
-  if (cached) return cached;
-
+export async function getTicker24h(symbol) {
   try {
+    const res = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol}`)
 
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/ticker/24hr?symbol=${symbol}`);
-    const data = await res.json();
-    console.log("BINANCE TICKER:", data);
-
-    if (data && data.lastPrice) {
-
-      const out = {
-        symbol: data.symbol || symbol,
-        priceChange: parseFloat(data.priceChange || 0),
-        priceChangePercent: parseFloat(data.priceChangePercent || 0),
-        lastPrice: parseFloat(data.lastPrice || 0),
-        volume: parseFloat(data.volume || 0),
-        quoteVolume: parseFloat(data.quoteVolume || 0)
-      };
-
-      set(key, out, CACHE_TTL);
-      return out;
-
+    if (!res.ok) {
+      console.log("BINANCE ERROR STATUS:", res.status)
+      throw new Error("Binance API failed")
     }
 
-    return null;
+    const data = await res.json()
 
-  } catch (e) {
-    console.error("Ticker fetch failed:", e);
-  
+    console.log("BINANCE DATA:", data)
+
+    return {
+      symbol: data.symbol,
+      lastPrice: Number(data.lastPrice),
+      priceChangePercent: Number(data.priceChangePercent),
+      quoteVolume: Number(data.quoteVolume)
+    }
+
+  } catch (err) {
+
+    console.log("BINANCE FETCH FAILED:", err)
+
     return {
       symbol,
       lastPrice: 0,
       priceChangePercent: 0,
       quoteVolume: 0
-    };
+    }
   }
 }
 
