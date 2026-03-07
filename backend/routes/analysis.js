@@ -38,48 +38,43 @@ router.get('/:symbol', async (req, res) => {
     let symbol = req.params.symbol.toUpperCase().trim();
 
     if (!symbol.endsWith("USDT")) {
-      symbol = symbol + "USDT";
+      symbol += "USDT";
     }
 
     const pair = symbol;
 
+    console.log("Running analysis for:", pair);
+
     const ticker = await getTicker24h(pair);
+
+    if (!ticker || !ticker.lastPrice) {
+      throw new Error(`Ticker unavailable for ${pair}`);
+    }
+
     const oi = await getOpenInterest(pair);
     const klines = await getKlines(pair, "15m", 120);
+
+    if (!klines.length) {
+      throw new Error(`No kline data`);
+    }
+
     const depth = await getOrderBookDepth(pair);
     const liqOrders = await getLiquidationOrders(pair);
 
-    recordOpenInterest(pair, oi?.openInterest);
-
-    const indicators = getIndicatorSummary(klines);
-    const regime = getRegimeFromKlines(klines);
-    const strategy = getRegimeStrategy(regime);
-
-    const oiChangePct = getOIPercentChange(pair, oi?.openInterest);
-    const oiInterpretation = interpretOIAndPrice(ticker.priceChangePercent || 0, oiChangePct);
-
-    const clusters = clusterLiquidations(liqOrders, ticker.lastPrice);
-    const liquidityZones = detectLiquidityZones(klines, depth);
-
-    const orderBook = analyzeOrderBook(depth.bids, depth.asks);
+    // rest of your analysis logic
 
     res.json({
-      symbol,
-      price: ticker.lastPrice,
-      change24h: ticker.priceChangePercent,
-      volume: ticker.quoteVolume,
-      fundingRate: funding?.fundingRate,
-      openInterest: oi?.openInterest,
-      indicators,
-      regime,
-      strategy,
-      orderBook
+      symbol: pair,
+      price: ticker.lastPrice
     });
 
   } catch (e) {
 
     console.error(e);
-    res.status(500).json({ error: e.message });
+
+    res.status(500).json({
+      error: e.message
+    });
 
   }
 
