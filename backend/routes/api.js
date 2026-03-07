@@ -5,26 +5,14 @@ const router = Router();
 
 router.get("/analyze/:symbol", async (req,res)=>{
 
-  try{
+  let symbol = req.params.symbol.toUpperCase();
 
-    let symbol=req.params.symbol.toUpperCase();
+  if(!symbol.endsWith("USDT"))
+    symbol += "USDT";
 
-    if(!symbol.endsWith("USDT"))
-      symbol+="USDT";
+  const data = await runAnalysis(symbol);
 
-    const data = await runAnalysis(symbol);
-
-    res.json(data);
-
-  }
-
-  catch(err){
-
-    res.status(500).json({
-      error:err.message
-    });
-
-  }
+  res.json(data);
 
 });
 
