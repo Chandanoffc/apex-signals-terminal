@@ -1,7 +1,6 @@
-import fetch from 'node-fetch';
 import { get, set } from '../utils/cache.js';
 
-const BINANCE_FUTURES = 'https://api.binance.com';
+const BINANCE_FUTURES = 'https://fapi.binance.com';
 const BINANCE_SPOT = 'https://api.binance.com';
 const CACHE_TTL = 60 * 1000;
 
@@ -10,46 +9,79 @@ function cacheKey(prefix, symbol = '') {
 }
 
 export async function getPremiumIndex(symbol = 'BTCUSDT') {
+
   const key = cacheKey('premium', symbol);
   const cached = get(key);
   if (cached) return cached;
+
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/api/v1/premiumIndex?symbol=${symbol}`);
+
+    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/premiumIndex?symbol=${symbol}`);
     const data = await res.json();
+
     if (data.lastFundingRate !== undefined) {
-      const out = { symbol: data.symbol, fundingRate: parseFloat(data.lastFundingRate), markPrice: parseFloat(data.markPrice || 0) };
+
+      const out = {
+        symbol: data.symbol,
+        fundingRate: parseFloat(data.lastFundingRate),
+        markPrice: parseFloat(data.markPrice || 0)
+      };
+
       set(key, out, CACHE_TTL);
       return out;
+
     }
+
     return null;
+
   } catch (e) {
+
+    console.log("Premium index error:", e);
     return null;
+
   }
+
 }
 
 export async function getOpenInterest(symbol = 'BTCUSDT') {
+
   const key = cacheKey('oi', symbol);
   const cached = get(key);
   if (cached) return cached;
+
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/api/v1/openInterest?symbol=${symbol}`);
+
+    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/openInterest?symbol=${symbol}`);
     const data = await res.json();
+
     if (data.openInterest !== undefined) {
-      const out = { symbol, openInterest: parseFloat(data.openInterest) };
+
+      const out = {
+        symbol,
+        openInterest: parseFloat(data.openInterest)
+      };
+
       set(key, out, CACHE_TTL);
       return out;
+
     }
+
     return null;
+
   } catch (e) {
+
+    console.log("Open interest error:", e);
     return null;
+
   }
+
 }
 
 export async function getTicker24h(symbol) {
 
   try {
 
-    const coin = symbol.replace("USDT","")
+    const coin = symbol.replace("USDT", "");
 
     const res = await fetch(
       `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${coin}`,
@@ -58,113 +90,183 @@ export async function getTicker24h(symbol) {
           "X-CMC_PRO_API_KEY": process.env.CMC_API_KEY
         }
       }
-    )
+    );
 
-    const data = await res.json()
+    const data = await res.json();
 
-    const coinData = data.data[coin].quote.USD
+    if (!data?.data?.[coin]?.quote?.USD) {
+
+      return {
+        symbol,
+        lastPrice: 0,
+        priceChangePercent: 0,
+        quoteVolume: 0
+      };
+
+    }
+
+    const coinData = data.data[coin].quote.USD;
 
     return {
+
       symbol,
-      lastPrice: coinData.price,
-      priceChangePercent: coinData.percent_change_24h,
-      quoteVolume: coinData.volume_24h
-    }
+      lastPrice: coinData.price || 0,
+      priceChangePercent: coinData.percent_change_24h || 0,
+      quoteVolume: coinData.volume_24h || 0
+
+    };
 
   } catch (err) {
 
-    console.log("CMC ERROR:", err)
+    console.log("CMC ERROR:", err);
 
     return {
       symbol,
       lastPrice: 0,
       priceChangePercent: 0,
       quoteVolume: 0
-    }
+    };
 
   }
 
 }
 
 export async function getLiquidationOrders(symbol = 'BTCUSDT', limit = 100) {
+
   const key = cacheKey('liq', symbol) + '_' + limit;
   const cached = get(key);
   if (cached) return cached;
+
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/api/v1/forceOrders?symbol=${symbol}&limit=${limit}`);
+
+    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/forceOrders?symbol=${symbol}&limit=${limit}`);
     const data = await res.json();
+
     const orders = Array.isArray(data) ? data : [];
+
     set(key, orders, CACHE_TTL);
     return orders;
+
   } catch (e) {
+
+    console.log("Liquidations error:", e);
     return [];
+
   }
+
 }
 
 export async function getOrderBookDepth(symbol = 'BTCUSDT', limit = 20) {
+
   const key = cacheKey('depth', symbol);
   const cached = get(key);
   if (cached) return cached;
+
   try {
+
     const res = await fetch(`${BINANCE_SPOT}/api/v3/depth?symbol=${symbol}&limit=${limit}`);
     const data = await res.json();
-    if (data.bids && data.asks) {
+
+    if (data?.bids && data?.asks) {
+
       set(key, data, CACHE_TTL);
       return data;
+
     }
+
     return { bids: [], asks: [] };
+
   } catch (e) {
+
+    console.log("Depth error:", e);
     return { bids: [], asks: [] };
+
   }
+
 }
 
 export async function getKlines(symbol = 'BTCUSDT', interval = '1h', limit = 100) {
+
   const key = cacheKey('klines', symbol) + '_' + interval + '_' + limit;
   const cached = get(key);
   if (cached) return cached;
+
   try {
+
     const res = await fetch(
       `${BINANCE_SPOT}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
     );
+
     const data = await res.json();
+
     if (Array.isArray(data)) {
+
       set(key, data, CACHE_TTL);
       return data;
+
     }
+
     return [];
+
   } catch (e) {
+
+    console.log("Klines error:", e);
     return [];
+
   }
+
 }
 
 export async function getAllPremiumIndex() {
+
   const key = 'binance_premium_all';
   const cached = get(key);
   if (cached) return cached;
+
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/api/v1/premiumIndex`);
+
+    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/premiumIndex`);
     const data = await res.json();
+
     const out = Array.isArray(data) ? data : [];
+
     set(key, out, CACHE_TTL);
     return out;
+
   } catch (e) {
+
+    console.log("All premium index error:", e);
     return [];
+
   }
+
 }
 
 export async function getAllOpenInterest() {
+
   const key = 'binance_oi_all';
   const cached = get(key);
   if (cached) return cached;
+
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/api/v1/openInterest`);
+
+    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/openInterest`);
     const data = await res.json();
-    if (data.openInterest !== undefined) {
+
+    if (data?.openInterest !== undefined) {
+
       set(key, data, CACHE_TTL);
       return data;
+
     }
+
     return null;
+
   } catch (e) {
+
+    console.log("All open interest error:", e);
     return null;
+
   }
+
 }
