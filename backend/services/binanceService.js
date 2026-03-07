@@ -46,17 +46,14 @@ export async function getOpenInterest(symbol = 'BTCUSDT') {
 }
 
 export async function getTicker24h(symbol) {
-  try {
-    const res = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol}`)
 
-    if (!res.ok) {
-      console.log("BINANCE ERROR STATUS:", res.status)
-      throw new Error("Binance API failed")
-    }
+  try {
+
+    const res = await fetch(
+      `https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol}`
+    )
 
     const data = await res.json()
-
-    console.log("BINANCE DATA:", data)
 
     return {
       symbol: data.symbol,
@@ -65,9 +62,9 @@ export async function getTicker24h(symbol) {
       quoteVolume: Number(data.quoteVolume)
     }
 
-  } catch (err) {
+  } catch (e) {
 
-    console.log("BINANCE FETCH FAILED:", err)
+    console.log("BINANCE ERROR", e)
 
     return {
       symbol,
@@ -75,7 +72,9 @@ export async function getTicker24h(symbol) {
       priceChangePercent: 0,
       quoteVolume: 0
     }
+
   }
+
 }
 
 export async function getLiquidationOrders(symbol = 'BTCUSDT', limit = 100) {
