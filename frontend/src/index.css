@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-apex-bg text-gray-100 font-sans antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-apex-panel;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-apex-border rounded-full;
+}

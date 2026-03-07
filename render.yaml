@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: apex-signals-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CMC_KEY
+        sync: false
