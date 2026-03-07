@@ -47,25 +47,23 @@ router.get('/:symbol', async (req, res) => {
 
     const ticker = await getTicker24h(pair);
 
-    if (!ticker || !ticker.lastPrice) {
-      throw new Error(`Ticker unavailable for ${pair}`);
-    }
+    const lastPrice = ticker?.lastPrice || 0;
+    const priceChangePercent = ticker?.priceChangePercent || 0;
+    const volume = ticker?.quoteVolume || 0;
 
     const oi = await getOpenInterest(pair);
     const klines = await getKlines(pair, "15m", 120);
 
     if (!klines.length) {
-      throw new Error(`No kline data`);
+      throw new Error("No kline data");
     }
 
     const depth = await getOrderBookDepth(pair);
     const liqOrders = await getLiquidationOrders(pair);
 
-    // rest of your analysis logic
-
     res.json({
       symbol: pair,
-      price: ticker.lastPrice
+      price: lastPrice
     });
 
   } catch (e) {
