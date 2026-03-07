@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://apex-signals-terminal.onrender.com';
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
