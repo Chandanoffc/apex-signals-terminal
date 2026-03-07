@@ -98,7 +98,7 @@ router.get("/:symbol", async (req, res) => {
       ? analyzeOrderBook(depth.bids, depth.asks)
       : null;
 
-    // ------- SIMPLE SIGNAL ENGINE -------
+    /// ------- SIMPLE SIGNAL ENGINE -------
 
 let bullScore = 0;
 let bearScore = 0;
@@ -117,6 +117,7 @@ let bias = "neutral";
 if (bullScore > bearScore) bias = "bullish";
 if (bearScore > bullScore) bias = "bearish";
 
+
 // ------- AI STYLE SUMMARY -------
 
 let analysis = "Market conditions appear neutral.";
@@ -129,6 +130,7 @@ if (bias === "bearish") {
   analysis = "Market structure suggests bearish pressure with potential downside continuation.";
 }
 
+
 // ------- RESPONSE -------
 
 res.json({
@@ -139,11 +141,9 @@ res.json({
   priceChange24h: Number(priceChangePercent.toFixed(2)),
   volume24h: Math.round(volume),
 
-  fundingRate: null,
-
   openInterest: oi?.openInterest || 0,
-  openInterestChangePct: oiChangePct,
-  oiInterpretation,
+  openInterestChangePct: oiChangePct || 0,
+  oiInterpretation: oiInterpretation || "neutral",
 
   bullScore,
   bearScore,
@@ -152,7 +152,16 @@ res.json({
   bias,
 
   indicators: [
-    ["PRICE TREND", priceChangePercent.toFixed(2) + "%", bias.toUpperCase(), bias === "bullish" ? "#00ff88" : bias === "bearish" ? "#ff3355" : "#ffcc00"]
+    [
+      "PRICE TREND",
+      priceChangePercent.toFixed(2) + "%",
+      bias.toUpperCase(),
+      bias === "bullish"
+        ? "#00ff88"
+        : bias === "bearish"
+        ? "#ff3355"
+        : "#ffcc00"
+    ]
   ],
 
   analysis,
