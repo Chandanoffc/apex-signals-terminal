@@ -1,47 +1,33 @@
 import { Router } from "express";
 import {
-  getPremiumIndex,
-  getOpenInterest,
-  getTicker24h,
-  getLiquidationOrders,
-  getOrderBookDepth,
-  getKlines
+getPremiumIndex,
+getOpenInterest,
+getTicker24h,
+getLiquidationOrders,
+getOrderBookDepth,
+getKlines
 } from "../services/binanceService.js";
 
 import { getIndicatorSummary } from "../analytics/indicatorsService.js";
-import { getRegimeFromKlines, getRegimeStrategy } from "../analytics/marketRegimeService.js";
 import { getOIPercentChange, interpretOIAndPrice, recordOpenInterest } from "../analytics/openInterestService.js";
 import { clusterLiquidations } from "../analytics/liquidationClusterService.js";
-import { detectLiquidityZones, scoreStopHuntProbability } from "../analytics/liquidityMapService.js";
+import { detectLiquidityZones } from "../analytics/liquidityMapService.js";
 import { analyzeOrderBook } from "../analytics/orderBookService.js";
 
 const router = Router();
 
-router.get("/:symbol", async (req, res) => {
 
-try {
+// ====================================
+// MAIN ANALYSIS ENGINE
+// ====================================
 
-let symbol = req.params.symbol.toUpperCase().trim();
-
-if (!symbol.endsWith("USDT")) {
-symbol += "USDT";
-}
-
-const pair = symbol;
-
-console.log("Running analysis for:", pair);
-
-
-// ---------------- PRICE DATA ----------------
+async function runAnalysis(pair){
 
 const ticker = await getTicker24h(pair);
 
 const lastPrice = Number(ticker?.lastPrice || 0);
 const priceChangePercent = Number(ticker?.priceChangePercent || 0);
 const volume = Number(ticker?.quoteVolume || 0);
-
-
-// ---------------- 24H RANGE ----------------
 
 const high24h = Number(ticker?.highPrice || lastPrice);
 const low24h = Number(ticker?.lowPrice || lastPrice);
@@ -51,245 +37,377 @@ high24h && low24h
 ? ((high24h - low24h) / lastPrice) * 100
 : 0;
 
-
-// ---------------- MARKET DATA ----------------
-
 const oi = await getOpenInterest(pair);
-const klines = await getKlines(pair, "15m", 120);
+const klines = await getKlines(pair,"15m",120);
 const depth = await getOrderBookDepth(pair);
 const liqOrders = await getLiquidationOrders(pair);
+const funding = await getPremiumIndex(pair);
 
 
-// ---------------- INDICATORS ----------------
+// FUNDING SENTIMENT
 
-let indicators = [];
+const fundingRate =
+funding?.lastFundingRate
+? Number(funding.lastFundingRate)*100
+: 0;
 
-if (klines?.length) {
-const indicatorSummary = getIndicatorSummary(klines);
+let fundingSentiment="NEUTRAL";
 
-indicators = indicatorSummary || [];
+if(fundingRate>0.02) fundingSentiment="OVERLONG";
+if(fundingRate<-0.02) fundingSentiment="OVERSHORT";
+
+
+// MARKET REGIME
+
+let regime="RANGING";
+
+if(Math.abs(priceChangePercent)>3) regime="VOLATILE";
+if(priceChangePercent>2) regime="TRENDING_UP";
+if(priceChangePercent<-2) regime="TRENDING_DOWN";
+
+
+// OPEN INTEREST
+
+let oiChangePct=0;
+let oiInterpretation="neutral";
+
+if(oi?.openInterest){
+
+recordOpenInterest(pair,oi.openInterest);
+
+oiChangePct=getOIPercentChange(pair,oi.openInterest)||0;
+
+oiInterpretation=
+interpretOIAndPrice(priceChangePercent,oiChangePct)||"neutral";
+
 }
 
 
-// ---------------- OI ANALYSIS ----------------
+// LIQUIDATION HEATMAP
 
-let oiChangePct = 0;
-let oiInterpretation = "neutral";
+const clusters=
+liqOrders
+?clusterLiquidations(liqOrders,lastPrice)
+:[];
 
-if (oi?.openInterest) {
-recordOpenInterest(pair, oi.openInterest);
+let liquidationHeatmap=[];
 
-oiChangePct = getOIPercentChange(pair, oi.openInterest) || 0;
+if(clusters?.length){
 
-oiInterpretation =
-interpretOIAndPrice(priceChangePercent, oiChangePct) || "neutral";
+liquidationHeatmap=
+clusters
+.sort((a,b)=>b.size-a.size)
+.slice(0,6)
+.map(c=>({
+
+price:Number(c.price),
+size:Math.round(c.size),
+side:c.price>lastPrice?"ABOVE":"BELOW"
+
+}));
+
 }
 
 
-// ---------------- LIQUIDATIONS ----------------
+// LIQUIDITY ZONES
 
-const clusters = liqOrders
-? clusterLiquidations(liqOrders, lastPrice)
-: [];
-
-
-// ---------------- LIQUIDITY ZONES ----------------
-
-const liquidityZones = klines?.length
-? detectLiquidityZones(klines, depth)
-: { resistance: [], support: [] };
+const liquidityZones=
+klines?.length
+?detectLiquidityZones(klines,depth)
+:{resistance:[],support:[]};
 
 
-// ---------------- SUPPORT / RESISTANCE ----------------
+// SUPPORT / RESISTANCE
 
-const resistance =
+const resistance=
 liquidityZones?.resistance?.slice(0,3).map((z,i)=>[
-`R${i+1}`,
-Number(z.price)
-]) || [];
+`R${i+1}`,Number(z.price)
+])||[];
 
-const support =
+const support=
 liquidityZones?.support?.slice(0,3).map((z,i)=>[
-`S${i+1}`,
-Number(z.price)
-]) || [];
+`S${i+1}`,Number(z.price)
+])||[];
 
 
-// ---------------- ORDERBOOK ----------------
+// ORDERBOOK
 
-const orderBook =
+const orderBook=
 depth
-? analyzeOrderBook(depth.bids, depth.asks)
-: null;
+?analyzeOrderBook(depth.bids,depth.asks)
+:null;
 
 
-// ---------------- ATR CALCULATION ----------------
+// WHALE ORDERS
 
-let atr = 0;
+let whaleOrders=[];
 
-if (klines && klines.length > 1) {
+if(depth?.bids&&depth?.asks){
 
-let totalRange = 0;
+const threshold=500000;
 
-for (let i = 1; i < klines.length; i++) {
+const bids=depth.bids
+.map(b=>{
 
-const high = Number(klines[i][2]);
-const low = Number(klines[i][3]);
+const price=Number(b[0]);
+const qty=Number(b[1]);
+const value=price*qty;
 
-totalRange += Math.abs(high - low);
+return{price,value,side:"BUY"};
+
+})
+.filter(b=>b.value>threshold);
+
+const asks=depth.asks
+.map(a=>{
+
+const price=Number(a[0]);
+const qty=Number(a[1]);
+const value=price*qty;
+
+return{price,value,side:"SELL"};
+
+})
+.filter(a=>a.value>threshold);
+
+whaleOrders=
+[...bids,...asks]
+.sort((a,b)=>b.value-a.value)
+.slice(0,6)
+.map(w=>({
+
+price:w.price,
+sizeUSD:Math.round(w.value),
+side:w.side
+
+}));
+
 }
 
-atr = totalRange / klines.length;
+
+// ATR CALCULATION
+
+let atr=0;
+
+if(klines?.length>1){
+
+let totalRange=0;
+
+for(let i=1;i<klines.length;i++){
+
+const high=Number(klines[i][2]);
+const low=Number(klines[i][3]);
+
+totalRange+=Math.abs(high-low);
+
+}
+
+atr=totalRange/klines.length;
+
 }
 
 
-// ---------------- PROJECTIONS ----------------
+// TARGETS
 
-const bullTarget = lastPrice + atr * 2;
-const bearTarget = lastPrice - atr * 2;
+const bullTarget=lastPrice+atr*2;
+const bearTarget=lastPrice-atr*2;
 
-const extremeBull = lastPrice + atr * 3.5;
-const extremeBear = lastPrice - atr * 3.5;
-
-
-// ---------------- SIGNAL ENGINE ----------------
-
-let bullScore = 0;
-let bearScore = 0;
-
-if (priceChangePercent > 0) bullScore++;
-if (priceChangePercent < 0) bearScore++;
-
-if (oiChangePct > 0) bullScore++;
-if (oiChangePct < 0) bearScore++;
-
-if (orderBook?.pressure === "BULLISH") bullScore++;
-if (orderBook?.pressure === "BEARISH") bearScore++;
-
-let bias = "neutral";
-
-if (bullScore > bearScore) bias = "bullish";
-if (bearScore > bullScore) bias = "bearish";
+const extremeBull=lastPrice+atr*3.5;
+const extremeBear=lastPrice-atr*3.5;
 
 
-// ---------------- CONFIDENCE ----------------
+// SIGNAL ENGINE
 
-const confidencePct = Math.min(
-100,
-Math.round((Math.max(bullScore, bearScore) / 5) * 100)
+let bullScore=0;
+let bearScore=0;
+
+if(priceChangePercent>0) bullScore++;
+if(priceChangePercent<0) bearScore++;
+
+if(oiChangePct>0) bullScore++;
+if(oiChangePct<0) bearScore++;
+
+if(orderBook?.pressure==="BULLISH") bullScore++;
+if(orderBook?.pressure==="BEARISH") bearScore++;
+
+if(fundingSentiment==="OVERSHORT") bullScore++;
+if(fundingSentiment==="OVERLONG") bearScore++;
+
+let bias="neutral";
+
+if(bullScore>bearScore) bias="bullish";
+if(bearScore>bullScore) bias="bearish";
+
+const confidencePct=
+Math.min(100,
+Math.round((Math.max(bullScore,bearScore)/6)*100)
 );
 
 
-// ---------------- AI ANALYSIS ----------------
+// ====================================
+// AI TRADE SIGNAL GENERATOR
+// ====================================
 
-let analysis = "Market conditions appear neutral.";
+let tradeSignal=null;
 
-if (bias === "bullish") {
-analysis = "Market momentum currently favors upside continuation.";
+if(confidencePct>60){
+
+if(bias==="bullish"){
+
+tradeSignal={
+side:"LONG",
+entry:lastPrice,
+target:Number(bullTarget.toFixed(2)),
+stop:Number((lastPrice-atr*1.5).toFixed(2)),
+confidence:confidencePct
+};
+
 }
 
-if (bias === "bearish") {
-analysis = "Market structure suggests bearish pressure.";
+if(bias==="bearish"){
+
+tradeSignal={
+side:"SHORT",
+entry:lastPrice,
+target:Number(bearTarget.toFixed(2)),
+stop:Number((lastPrice+atr*1.5).toFixed(2)),
+confidence:confidencePct
+};
+
+}
+
 }
 
 
-// ---------------- RESPONSE ----------------
+return{
 
-res.json({
+symbol:pair,
 
-symbol: pair,
-
-currentPrice: Number(lastPrice.toFixed(2)),
-priceChange24h: Number(priceChangePercent.toFixed(2)),
-volume24h: Math.round(volume),
+currentPrice:Number(lastPrice.toFixed(2)),
+priceChange24h:Number(priceChangePercent.toFixed(2)),
+volume24h:Math.round(volume),
 
 high24h,
 low24h,
-spread: spread.toFixed(2),
+spread:spread.toFixed(2),
 
-atr: Number(atr.toFixed(2)),
+atr:Number(atr.toFixed(2)),
 
-bullTarget: Number(bullTarget.toFixed(2)),
-bearTarget: Number(bearTarget.toFixed(2)),
+bullTarget:Number(bullTarget.toFixed(2)),
+bearTarget:Number(bearTarget.toFixed(2)),
 
-extremeBull: Number(extremeBull.toFixed(2)),
-extremeBear: Number(extremeBear.toFixed(2)),
+extremeBull:Number(extremeBull.toFixed(2)),
+extremeBear:Number(extremeBear.toFixed(2)),
 
 resistance,
 support,
 
-openInterest: oi?.openInterest || 0,
-openInterestChangePct: oiChangePct,
+fundingRate:Number(fundingRate.toFixed(4)),
+fundingSentiment,
+
+openInterest:oi?.openInterest||0,
+openInterestChangePct:oiChangePct,
 oiInterpretation,
+
+liquidationHeatmap,
+
+whaleOrders,
+
+regime,
 
 bullScore,
 bearScore,
-bullPct: bullScore * 20,
+bullPct:bullScore*20,
 
 bias,
 
-indicators: [
-[
-"PRICE TREND",
-priceChangePercent.toFixed(2) + "%",
-bias.toUpperCase(),
-bias === "bullish" ? "#00ff88" : "#ff3355"
-]
-],
-
-outlook: {
-
-momentum: bias.toUpperCase(),
-
-strength:
-Math.abs(bullScore - bearScore) >= 2
-? "STRONG"
-: "MODERATE",
-
 confidencePct,
 
-entryZone:
-bias === "bullish"
-? `$${(lastPrice-atr).toFixed(2)} - $${lastPrice.toFixed(2)}`
-: `$${lastPrice.toFixed(2)} - $${(lastPrice+atr).toFixed(2)}`,
+tradeSignal,
 
-targetZone:
-bias === "bullish"
-? `$${bullTarget.toFixed(2)}`
-: `$${bearTarget.toFixed(2)}`,
+timestamp:new Date().toUTCString()
 
-stopZone:
-bias === "bullish"
-? `$${(lastPrice-atr*2).toFixed(2)}`
-: `$${(lastPrice+atr*2).toFixed(2)}`,
+};
 
-reasons: [
-`Price change 24h: ${priceChangePercent.toFixed(2)}%`,
-`Open interest shift: ${oiChangePct}%`,
-`Orderbook pressure: ${orderBook?.pressure || "neutral"}`
-],
+}
 
-verdict: analysis,
 
-watchOut: "High volatility possible near liquidity zones."
-},
+// SINGLE TOKEN ANALYSIS
 
-analysis,
+router.get("/analysis/:symbol", async(req,res)=>{
 
-timestamp: new Date().toUTCString()
+try{
 
-});
+let symbol=req.params.symbol.toUpperCase();
 
-} catch (e) {
+if(!symbol.endsWith("USDT")) symbol+="USDT";
 
-console.error(e);
+const data=await runAnalysis(symbol);
 
-res.status(500).json({
-error: e.message
-});
+res.json(data);
+
+}
+
+catch(e){
+
+res.status(500).json({error:e.message});
 
 }
 
 });
+
+
+// MULTI TOKEN SCANNER
+
+router.get("/scanner", async(req,res)=>{
+
+try{
+
+const tokens=[
+"BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT",
+"XRPUSDT","DOGEUSDT","AVAXUSDT","ADAUSDT",
+"LINKUSDT","ARBUSDT"
+];
+
+const results=[];
+
+for(const t of tokens){
+
+const r=await runAnalysis(t);
+
+results.push(r);
+
+}
+
+const bullish=
+results
+.filter(r=>r.bias==="bullish")
+.sort((a,b)=>b.confidencePct-a.confidencePct)
+.slice(0,5);
+
+const bearish=
+results
+.filter(r=>r.bias==="bearish")
+.sort((a,b)=>b.confidencePct-a.confidencePct)
+.slice(0,5);
+
+res.json({
+
+topBullish:bullish,
+topBearish:bearish,
+scanned:results.length
+
+});
+
+}
+
+catch(e){
+
+res.status(500).json({error:e.message});
+
+}
+
+});
+
 
 export default router;
