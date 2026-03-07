@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://apex-signals-terminal.onrender.com';
+const API_BASE = "https://apex-signals-terminal.onrender.com";
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
@@ -10,7 +10,7 @@ async function request(path, options = {}) {
 export const api = {
   getSignals: () => request('/signals'),
   getSignalHistory: (limit = 100) => request(`/signals/history?limit=${limit}`),
-  getAnalysis: (symbol) => request(`/analysis/${symbol}`),
+  getAnalysis: (symbol) => request(`/analysis/${symbol}USDT`),
   getMarket: () => request('/market'),
   getWhales: () => request('/whales'),
   getLiquidations: () => request('/liquidations'),
