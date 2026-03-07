@@ -98,35 +98,67 @@ router.get("/:symbol", async (req, res) => {
       ? analyzeOrderBook(depth.bids, depth.asks)
       : null;
 
-    // -------- RESPONSE --------
+    // ------- SIMPLE SIGNAL ENGINE -------
 
-    res.json({
-      symbol: pair,
-      price: lastPrice,
-      change24h: priceChangePercent,
-      volume: volume,
+let bullScore = 0;
+let bearScore = 0;
 
-      fundingRate: null,
-      openInterest: oi?.openInterest || 0,
-      openInterestChangePct: oiChangePct,
-      oiInterpretation,
+if (priceChangePercent > 0) bullScore++;
+if (priceChangePercent < 0) bearScore++;
 
-      regime,
-      strategy,
-      indicators,
+if (oiChangePct > 0) bullScore++;
+if (oiChangePct < 0) bearScore++;
 
-      liquidationClusters: clusters,
-      liquidityZones: zonesWithScore,
-      orderBook
-    });
+if (orderBook?.pressure === "BUY") bullScore++;
+if (orderBook?.pressure === "SELL") bearScore++;
 
-  } catch (e) {
-    console.error(e);
+let bias = "neutral";
 
-    res.status(500).json({
-      error: e.message
-    });
-  }
+if (bullScore > bearScore) bias = "bullish";
+if (bearScore > bullScore) bias = "bearish";
+
+// ------- AI STYLE SUMMARY -------
+
+let analysis = "Market conditions appear neutral.";
+
+if (bias === "bullish") {
+  analysis = "Market momentum currently favors upside continuation. Buyers appear to be in control.";
+}
+
+if (bias === "bearish") {
+  analysis = "Market structure suggests bearish pressure with potential downside continuation.";
+}
+
+// ------- RESPONSE -------
+
+res.json({
+
+  symbol: pair,
+
+  currentPrice: Number(lastPrice.toFixed(2)),
+  priceChange24h: Number(priceChangePercent.toFixed(2)),
+  volume24h: Math.round(volume),
+
+  fundingRate: null,
+
+  openInterest: oi?.openInterest || 0,
+  openInterestChangePct: oiChangePct,
+  oiInterpretation,
+
+  bullScore,
+  bearScore,
+  bullPct: bullScore * 20,
+
+  bias,
+
+  indicators: [
+    ["PRICE TREND", priceChangePercent.toFixed(2) + "%", bias.toUpperCase(), bias === "bullish" ? "#00ff88" : bias === "bearish" ? "#ff3355" : "#ffcc00"]
+  ],
+
+  analysis,
+
+  timestamp: new Date().toUTCString()
+
 });
 
 export default router;
