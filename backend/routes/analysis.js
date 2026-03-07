@@ -10,8 +10,7 @@ import {
 
 import { getIndicatorSummary } from "../analytics/indicatorsService.js";
 import { getRegimeFromKlines, getRegimeStrategy } from "../analytics/marketRegimeService.js";
-import { getOIPercentChange, interpretOIAndPrice } from "../analytics/openInterestService.js";
-import { recordOpenInterest } from "../analytics/openInterestService.js";
+import { getOIPercentChange, interpretOIAndPrice, recordOpenInterest } from "../analytics/openInterestService.js";
 import { clusterLiquidations } from "../analytics/liquidationClusterService.js";
 import { detectLiquidityZones, scoreStopHuntProbability } from "../analytics/liquidityMapService.js";
 import { analyzeOrderBook } from "../analytics/orderBookService.js";
@@ -35,9 +34,9 @@ router.get("/:symbol", async (req, res) => {
 
     const ticker = await getTicker24h(pair);
 
-    const lastPrice = ticker?.lastPrice || 0;
-    const priceChangePercent = ticker?.priceChangePercent || 0;
-    const volume = ticker?.quoteVolume || 0;
+    const lastPrice = Number(ticker?.lastPrice || 0);
+    const priceChangePercent = Number(ticker?.priceChangePercent || 0);
+    const volume = Number(ticker?.quoteVolume || 0);
 
     // -------- MARKET DATA --------
 
@@ -52,7 +51,7 @@ router.get("/:symbol", async (req, res) => {
     let regime = null;
     let strategy = null;
 
-    if (klines && klines.length) {
+    if (klines?.length) {
       indicators = getIndicatorSummary(klines);
       regime = getRegimeFromKlines(klines);
       strategy = getRegimeStrategy(regime);
@@ -60,13 +59,13 @@ router.get("/:symbol", async (req, res) => {
 
     // -------- OI ANALYSIS --------
 
-    let oiChangePct = null;
-    let oiInterpretation = null;
+    let oiChangePct = 0;
+    let oiInterpretation = "neutral";
 
-    if (oi && oi.openInterest) {
+    if (oi?.openInterest) {
       recordOpenInterest(pair, oi.openInterest);
-      oiChangePct = getOIPercentChange(pair, oi.openInterest);
-      oiInterpretation = interpretOIAndPrice(priceChangePercent || 0, oiChangePct);
+      oiChangePct = getOIPercentChange(pair, oi.openInterest) || 0;
+      oiInterpretation = interpretOIAndPrice(priceChangePercent, oiChangePct) || "neutral";
     }
 
     // -------- LIQUIDATION ANALYSIS --------
@@ -98,76 +97,85 @@ router.get("/:symbol", async (req, res) => {
       ? analyzeOrderBook(depth.bids, depth.asks)
       : null;
 
-    /// ------- SIMPLE SIGNAL ENGINE -------
+    // -------- SIMPLE SIGNAL ENGINE --------
 
-let bullScore = 0;
-let bearScore = 0;
+    let bullScore = 0;
+    let bearScore = 0;
 
-if (priceChangePercent > 0) bullScore++;
-if (priceChangePercent < 0) bearScore++;
+    if (priceChangePercent > 0) bullScore++;
+    if (priceChangePercent < 0) bearScore++;
 
-if (oiChangePct > 0) bullScore++;
-if (oiChangePct < 0) bearScore++;
+    if (oiChangePct > 0) bullScore++;
+    if (oiChangePct < 0) bearScore++;
 
-if (orderBook?.pressure === "BUY") bullScore++;
-if (orderBook?.pressure === "SELL") bearScore++;
+    if (orderBook?.pressure === "BULLISH") bullScore++;
+    if (orderBook?.pressure === "BEARISH") bearScore++;
 
-let bias = "neutral";
+    let bias = "neutral";
 
-if (bullScore > bearScore) bias = "bullish";
-if (bearScore > bullScore) bias = "bearish";
+    if (bullScore > bearScore) bias = "bullish";
+    if (bearScore > bullScore) bias = "bearish";
 
+    // -------- AI STYLE SUMMARY --------
 
-// ------- AI STYLE SUMMARY -------
+    let analysis = "Market conditions appear neutral.";
 
-let analysis = "Market conditions appear neutral.";
+    if (bias === "bullish") {
+      analysis = "Market momentum currently favors upside continuation.";
+    }
 
-if (bias === "bullish") {
-  analysis = "Market momentum currently favors upside continuation. Buyers appear to be in control.";
-}
+    if (bias === "bearish") {
+      analysis = "Market structure suggests bearish pressure.";
+    }
 
-if (bias === "bearish") {
-  analysis = "Market structure suggests bearish pressure with potential downside continuation.";
-}
+    // -------- RESPONSE --------
 
+    res.json({
 
-// ------- RESPONSE -------
+      symbol: pair,
 
-res.json({
+      currentPrice: Number(lastPrice.toFixed(2)),
+      priceChange24h: Number(priceChangePercent.toFixed(2)),
+      volume24h: Math.round(volume),
 
-  symbol: pair,
+      openInterest: oi?.openInterest || 0,
+      openInterestChangePct: oiChangePct,
+      oiInterpretation,
 
-  currentPrice: Number(lastPrice.toFixed(2)),
-  priceChange24h: Number(priceChangePercent.toFixed(2)),
-  volume24h: Math.round(volume),
+      bullScore,
+      bearScore,
+      bullPct: bullScore * 20,
 
-  openInterest: oi?.openInterest || 0,
-  openInterestChangePct: oiChangePct || 0,
-  oiInterpretation: oiInterpretation || "neutral",
+      bias,
 
-  bullScore,
-  bearScore,
-  bullPct: bullScore * 20,
+      indicators: [
+        [
+          "PRICE TREND",
+          priceChangePercent.toFixed(2) + "%",
+          bias.toUpperCase(),
+          bias === "bullish"
+            ? "#00ff88"
+            : bias === "bearish"
+            ? "#ff3355"
+            : "#ffcc00"
+        ]
+      ],
 
-  bias,
+      analysis,
 
-  indicators: [
-    [
-      "PRICE TREND",
-      priceChangePercent.toFixed(2) + "%",
-      bias.toUpperCase(),
-      bias === "bullish"
-        ? "#00ff88"
-        : bias === "bearish"
-        ? "#ff3355"
-        : "#ffcc00"
-    ]
-  ],
+      timestamp: new Date().toUTCString()
 
-  analysis,
+    });
 
-  timestamp: new Date().toUTCString()
+  } catch (e) {
 
+    console.error(e);
+
+    res.status(500).json({
+      error: e.message
+    });
+
+  }
 });
 
 export default router;
