@@ -18,26 +18,43 @@ import { analyzeOrderBook } from '../analytics/orderBookService.js';
 const router = Router();
 
 function binanceSymbol(symbol) {
-  return symbol === 'BTC' ? 'BTCUSDT' : `${symbol}USDT`;
+
+  symbol = symbol.toUpperCase().trim();
+
+  // If already Binance format
+  if (symbol.endsWith("USDT")) {
+    return symbol;
+  }
+
+  // Convert coin → pair
+  return `${symbol}USDT`;
+
 }
 
 router.get('/:symbol', async (req, res) => {
+
   try {
-    const symbol = (req.params.symbol || 'BTC').toUpperCase();
-    const pair = binanceSymbol(symbol);
 
-    const [ticker, funding, oi, liqOrders, depth, klines] = await Promise.all([
-      getTicker24h(pair),
-      getPremiumIndex(pair),
-      getOpenInterest(pair),
-      getLiquidationOrders(pair, 100),
-      getOrderBookDepth(pair, 25),
-      getKlines(pair, '1h', 100),
-    ]);
+    let symbol = req.params.symbol.toUpperCase().trim();
 
-    if (!ticker) {
-      return res.status(404).json({ error: 'Symbol not found' });
+    // Accept BTC or BTCUSDT
+    if (!symbol.endsWith("USDT")) {
+      symbol = symbol + "USDT";
     }
+
+    const data = await runAnalysis(symbol);
+
+    res.json(data);
+
+  } catch (err) {
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
 
     recordOpenInterest(pair, oi?.openInterest);
     const indicators = getIndicatorSummary(klines);
