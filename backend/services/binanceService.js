@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 import { get, set } from '../utils/cache.js';
 
-const BINANCE_FUTURES = 'https://fapi.binance.com';
+const BINANCE_FUTURES = 'https://api.binance.com';
 const BINANCE_SPOT = 'https://api.binance.com';
 const CACHE_TTL = 60 * 1000;
 
@@ -14,7 +14,7 @@ export async function getPremiumIndex(symbol = 'BTCUSDT') {
   const cached = get(key);
   if (cached) return cached;
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/premiumIndex?symbol=${symbol}`);
+    const res = await fetch(`${BINANCE_FUTURES}/api/v1/premiumIndex?symbol=${symbol}`);
     const data = await res.json();
     if (data.lastFundingRate !== undefined) {
       const out = { symbol: data.symbol, fundingRate: parseFloat(data.lastFundingRate), markPrice: parseFloat(data.markPrice || 0) };
@@ -32,7 +32,7 @@ export async function getOpenInterest(symbol = 'BTCUSDT') {
   const cached = get(key);
   if (cached) return cached;
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/openInterest?symbol=${symbol}`);
+    const res = await fetch(`${BINANCE_FUTURES}/api/v1/openInterest?symbol=${symbol}`);
     const data = await res.json();
     if (data.openInterest !== undefined) {
       const out = { symbol, openInterest: parseFloat(data.openInterest) };
@@ -50,7 +50,7 @@ export async function getTicker24h(symbol) {
   try {
 
     const res = await fetch(
-      `https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol}`
+      `https://api.binance.com/api/v1/ticker/24hr?symbol=${symbol}`
     )
 
     const data = await res.json()
@@ -82,7 +82,7 @@ export async function getLiquidationOrders(symbol = 'BTCUSDT', limit = 100) {
   const cached = get(key);
   if (cached) return cached;
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/forceOrders?symbol=${symbol}&limit=${limit}`);
+    const res = await fetch(`${BINANCE_FUTURES}/api/v1/forceOrders?symbol=${symbol}&limit=${limit}`);
     const data = await res.json();
     const orders = Array.isArray(data) ? data : [];
     set(key, orders, CACHE_TTL);
@@ -133,7 +133,7 @@ export async function getAllPremiumIndex() {
   const cached = get(key);
   if (cached) return cached;
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/premiumIndex`);
+    const res = await fetch(`${BINANCE_FUTURES}/api/v1/premiumIndex`);
     const data = await res.json();
     const out = Array.isArray(data) ? data : [];
     set(key, out, CACHE_TTL);
@@ -148,7 +148,7 @@ export async function getAllOpenInterest() {
   const cached = get(key);
   if (cached) return cached;
   try {
-    const res = await fetch(`${BINANCE_FUTURES}/fapi/v1/openInterest`);
+    const res = await fetch(`${BINANCE_FUTURES}/api/v1/openInterest`);
     const data = await res.json();
     if (data.openInterest !== undefined) {
       set(key, data, CACHE_TTL);
