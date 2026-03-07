@@ -49,22 +49,31 @@ export async function getTicker24h(symbol) {
 
   try {
 
+    const coin = symbol.replace("USDT","")
+
     const res = await fetch(
-      `https://api.binance.com/api/v1/ticker/24hr?symbol=${symbol}`
+      `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${coin}`,
+      {
+        headers: {
+          "X-CMC_PRO_API_KEY": process.env.CMC_API_KEY
+        }
+      }
     )
 
     const data = await res.json()
 
+    const coinData = data.data[coin].quote.USD
+
     return {
-      symbol: data.symbol,
-      lastPrice: Number(data.lastPrice),
-      priceChangePercent: Number(data.priceChangePercent),
-      quoteVolume: Number(data.quoteVolume)
+      symbol,
+      lastPrice: coinData.price,
+      priceChangePercent: coinData.percent_change_24h,
+      quoteVolume: coinData.volume_24h
     }
 
-  } catch (e) {
+  } catch (err) {
 
-    console.log("BINANCE ERROR", e)
+    console.log("CMC ERROR:", err)
 
     return {
       symbol,
