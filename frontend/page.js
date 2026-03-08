@@ -9,8 +9,6 @@ export default function Page() {
   const [error,setError] = useState(null);
   const [loading,setLoading] = useState(false);
 
-  const API_BASE = "https://apex-signals-terminal.onrender.com";
-
   async function analyse(){
 
     setError(null);
@@ -19,9 +17,9 @@ export default function Page() {
 
     try{
 
-      let sym = symbol.trim().toUpperCase();
+      const sym = symbol.trim().toUpperCase();
 
-      const response = await fetch(`${API_BASE}/api/analyze/${sym}`);
+      const response = await fetch(`/api/analyze/${sym}`);
 
       if(!response.ok){
         throw new Error("API request failed");
