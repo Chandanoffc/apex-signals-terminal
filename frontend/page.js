@@ -495,10 +495,10 @@ export default function Page() {
 
     try {
       // Calls your server-side API route — API key stays hidden
-      const res  = await fetch("https://apex-signals.onrender.com/api/analyse"), {
-        method:  "POST",
+      const res = await fetch(`https://apex-signals-terminal.onrender.com/api/analyze/${sym}`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ symbol: sym }),
+        body: JSON.stringify({ symbol: sym }),
       });
       const data = await res.json();
 
