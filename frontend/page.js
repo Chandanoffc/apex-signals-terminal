@@ -20,7 +20,7 @@ export default function Page() {
       const sym = symbol.trim().toUpperCase();
 
       const response = await fetch(
-        `https://apex-signals-terminal.onrender.com/api/analyze/${sym}`,
+        `fetch("https://apex-signals-terminal.onrender.com/api/analyze/" + sym)`,
         { cache: "no-store" }
       );
 
