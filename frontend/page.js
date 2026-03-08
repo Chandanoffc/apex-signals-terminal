@@ -9,24 +9,25 @@ export default function Page() {
   const [error,setError] = useState(null);
   const [loading,setLoading] = useState(false);
 
+  const API_BASE = "https://apex-signals-terminal.onrender.com";
+
   async function analyse(){
 
     setError(null);
     setLoading(true);
+    setData(null);
 
     try{
 
-      const sym = symbol.toUpperCase();
+      let sym = symbol.trim().toUpperCase();
 
-      const res = await fetch(
-        `https://apex-signals-terminal.onrender.com/api/analyze/${sym}`
-      );
+      const response = await fetch(`${API_BASE}/api/analyze/${sym}`);
 
-      if(!res.ok){
+      if(!response.ok){
         throw new Error("API request failed");
       }
 
-      const json = await res.json();
+      const json = await response.json();
 
       setData(json);
 
@@ -41,43 +42,101 @@ export default function Page() {
   }
 
   return (
-    <div style={{padding:40,color:"#00ff88",fontFamily:"monospace"}}>
 
-      <h1>APEX SIGNALS</h1>
+    <div style={{
+      padding:40,
+      background:"#020617",
+      minHeight:"100vh",
+      color:"#00ff88",
+      fontFamily:"monospace"
+    }}>
 
-      <input
-        value={symbol}
-        onChange={(e)=>setSymbol(e.target.value)}
-        style={{
-          padding:10,
-          fontSize:18,
-          marginRight:10
-        }}
-      />
+      <h1 style={{fontSize:42,marginBottom:30}}>
+        APEX SIGNALS
+      </h1>
 
-      <button
-        onClick={analyse}
-        style={{
-          padding:10,
-          background:"#00ff88",
-          color:"#000"
-        }}
-      >
-        ANALYSE
-      </button>
+      <div style={{marginBottom:20}}>
 
-      {loading && <p>Loading...</p>}
+        <input
+          value={symbol}
+          onChange={(e)=>setSymbol(e.target.value)}
+          placeholder="BTC"
+          style={{
+            padding:12,
+            fontSize:18,
+            width:200,
+            marginRight:10,
+            background:"#000",
+            color:"#00ff88",
+            border:"1px solid #00ff88"
+          }}
+        />
+
+        <button
+          onClick={analyse}
+          style={{
+            padding:"12px 20px",
+            background:"#00ff88",
+            border:"none",
+            fontWeight:"bold",
+            cursor:"pointer"
+          }}
+        >
+          ANALYSE
+        </button>
+
+      </div>
+
+      {loading && (
+        <p>Loading analysis...</p>
+      )}
 
       {error && (
-        <div style={{color:"red",marginTop:20}}>
+        <div style={{
+          background:"#3f0d12",
+          padding:20,
+          marginTop:20,
+          color:"#ff5a5a"
+        }}>
           ERROR: {error}
         </div>
       )}
 
       {data && (
-        <pre style={{marginTop:20}}>
-          {JSON.stringify(data,null,2)}
-        </pre>
+
+        <div style={{
+          marginTop:30,
+          background:"#000",
+          padding:20,
+          border:"1px solid #00ff88"
+        }}>
+
+          <h2>{data.symbol}</h2>
+
+          <p>Price: {data.price}</p>
+
+          <p>24h Change: {data.change24h}%</p>
+
+          <p>Volume 24h: {data.volume24h}</p>
+
+          <p>High 24h: {data.high24h}</p>
+
+          <p>Low 24h: {data.low24h}</p>
+
+          <p>Support: {data.support}</p>
+
+          <p>Resistance: {data.resistance}</p>
+
+          <p>Bullish Projection: {data.bullishProjection}</p>
+
+          <p>Bearish Projection: {data.bearishProjection}</p>
+
+          <p>Open Interest: {data.openInterest}</p>
+
+          <p>Funding Rate: {data.fundingRate}</p>
+
+        </div>
+
       )}
 
     </div>
