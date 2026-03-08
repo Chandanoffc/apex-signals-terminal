@@ -1,23 +1,36 @@
 import { Router } from "express";
-import { runAnalysis } from "../engine/analysisEngine.js";
+import { runAnalysis } from "./analysisEngine.js";
 
 const router = Router();
 
-router.get("/analyze/:symbol", async (req,res)=>{
+router.get("/analyze/:symbol", async (req, res) => {
 
-  let symbol = req.params.symbol.toUpperCase();
+  try {
 
-  if(!symbol.endsWith("USDT"))
-    symbol += "USDT";
+    let symbol = req.params.symbol.toUpperCase();
 
-  const data = await runAnalysis(symbol);
+    if (!symbol.endsWith("USDT")) {
+      symbol = symbol + "USDT";
+    }
 
-  res.json(data);
+    const data = await runAnalysis(symbol);
+
+    res.json(data);
+
+  } catch (error) {
+
+    console.error("Analysis error:", error);
+
+    res.status(500).json({
+      error: "Analysis failed"
+    });
+
+  }
 
 });
 
-router.get("/health",(req,res)=>{
-  res.json({status:"ok"});
+router.get("/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
 export default router;
