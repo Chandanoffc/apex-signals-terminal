@@ -19,13 +19,19 @@ export default function Page() {
 
       const sym = symbol.trim().toUpperCase();
 
-      const response = await fetch(`/api/analyze/${sym}`);
+      const response = await fetch(
+        `https://apex-signals-terminal.onrender.com/api/analyze/${sym}`,
+        { cache: "no-store" }
+      );
 
-      if(!response.ok){
-        throw new Error("API request failed");
+      const text = await response.text();
+
+      // Prevent JSON crash if HTML returned
+      if(text.startsWith("<")){
+        throw new Error("API returned HTML instead of JSON");
       }
 
-      const json = await response.json();
+      const json = JSON.parse(text);
 
       setData(json);
 
@@ -58,7 +64,6 @@ export default function Page() {
         <input
           value={symbol}
           onChange={(e)=>setSymbol(e.target.value)}
-          placeholder="BTC"
           style={{
             padding:12,
             fontSize:18,
@@ -85,9 +90,7 @@ export default function Page() {
 
       </div>
 
-      {loading && (
-        <p>Loading analysis...</p>
-      )}
+      {loading && <p>Loading analysis...</p>}
 
       {error && (
         <div style={{
@@ -115,7 +118,7 @@ export default function Page() {
 
           <p>24h Change: {data.change24h}%</p>
 
-          <p>Volume 24h: {data.volume24h}</p>
+          <p>Volume: {data.volume24h}</p>
 
           <p>High 24h: {data.high24h}</p>
 
